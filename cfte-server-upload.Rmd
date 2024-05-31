@@ -1,0 +1,227 @@
+---
+title: "data-upload"
+output: html_document
+date: "2024-05-31"
+---
+
+```{r Load Packages, echo = FALSE, warning = FALSE, message = FALSE}
+# # Load packages -----------------------------------------------------------------------------------
+suppressMessages({
+  memory.limit(size = 8000000)
+  library(readxl)
+  library(writexl)
+  library(plyr)
+  library(dplyr)
+  library(data.table)
+  library(zoo)
+  library(shiny)
+  library(shinydashboard)
+  library(shinydashboardPlus)
+  library(shinyWidgets)
+  library(htmlwidgets)
+  library(lubridate)
+  library(tcltk)
+  library(tidyverse)
+  library(plotly)
+  library(knitr)
+  library(kableExtra)
+  library(leaflet)
+  library(grid)
+  library(gridExtra)
+  library(eeptools)
+  library(ggQC)
+  library(zipcodeR)
+  library(utils)
+  library(scales)
+  library(chron)
+  library(bupaR)
+  library(shiny)
+  library(DT)
+  library(DiagrammeR)
+  library(shinyalert)
+  library(edeaR)
+  library(processmapR)
+  library(processmonitR)
+  library(processanimateR)
+  library(tidyr)
+  library(lubridate)
+  library(RColorBrewer)
+  library(DiagrammeR)
+  library(ggplot2)
+  library(leaflet)
+  library(readr)
+  library(highcharter)
+  library(ggforce) # for 'geom_arc_bar'
+  library(packcircles) # for packed circle graph
+  library(viridis)
+  library(ggiraph)
+  library(treemapify)
+  library(treemap)
+  library(broom)
+  library(extrafont)
+  library(tis) # for US holidays
+  library(vroom)
+  library(sjmisc)
+  library(tools)
+  library(here)
+  library(shinyBS)
+  library(shinyscreenshot)
+  library(fasttime)
+  library(shinycssloaders)
+  library(feather)
+  # library(zipcodeR)
+  library(formattable)
+  library(shinyjs)
+  library(janitor)
+  library(patchwork)
+  library(flexdashboard)
+  # library(tidyverse)
+  # library(viridis)
+  # library(hrbrthemes)
+  # library(plotly)
+  # install.packages("bsts")
+  library(bsts)
+  library(reactable)
+  # install.packages("reactablefmtr")
+  library(reactablefmtr)
+  library(svDialogs)
+  # library(openxlsx)
+  library(flextable)
+  library(officedown)
+  library(officer)
+  library(magrittr)
+  library(webshot) 
+  library(png)
+  library(ggh4x)
+  library(RODBC)
+  library(DBI)
+  library(odbc)
+  library(dbplyr)
+  library(pool)
+  library(emojifont)
+})
+
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Connect to Oracle, echo = FALSE, warning = FALSE, message = FALSE}
+
+# Connection to Oracle DB ------------------------------------------------------
+conn1 <- dbPool(drv = odbc(), dsn = "OAO Cloud DB SoYoun", timeout = 30)
+
+```
+
+```{r}
+
+# EXT_CPSC_BENCHMARK -- Yearly Update -- Jan/Feb Each Year
+# EXT_ACTIVE_STAFF -- Monthly Update -- Beginning of Each Month 
+# EXT_HIRE_TERM -- Temporary Data Pull from Dashboard -- Pulled by Cecilia -- DOES NOT include Life #
+
+```
+
+
+```{r Process CPSC Benchmark Data, echo = FALSE, warning = FALSE, message = FALSE}
+
+# Radiology Volume Monthly Summary Data
+cpsc_benchmark_tbl <- tbl(conn1, "EXT_CPSC_BENCHMARK")
+cpsc_benchmark <- cpsc_benchmark_tbl %>% collect()
+
+benchmark_new <- read_excel(file.choose())
+
+cpsc_benchmark <- cpsc_benchmark %>%
+  mutate(YEAR_KEY = as.character(year(YEAR_KEY)))
+
+cpsc_benchmark_updated <- rbind(benchmark_new, cpsc_benchmark)
+
+# Truncate the table
+dbExecute(conn1, "DROP TABLE EXT_CPSC_BENCHMARK")
+
+## Write to Oracle 
+batch_size <- 1000
+ 
+index_squence <- seq(1, nrow(cpsc_benchmark_updated), by = batch_size)
+for (i in index_squence) {
+  if(i == max(index_squence)) {
+    batch <- cpsc_benchmark_updated[i:nrow(cpsc_benchmark_updated), ]
+  } else {
+    batch <- cpsc_benchmark_updated[i:(i + batch_size - 1), ]
+  }
+  dbWriteTable(conn = conn1, name = "EXT_CPSC_BENCHMARK", value = batch, row.names = FALSE, append = TRUE)
+  print(paste0("i is:", i))
+  print(batch)
+}
+
+```
+
+
+```{r Process Active Credentialed Staff Data, echo = FALSE, warning = FALSE, message = FALSE}
+
+# Med Staff Active Credentialed Staff Data
+active_staff_tbl <- tbl(conn1, "EXT_ACTIVE_STAFF")
+active_staff <- active_staff_tbl %>% collect()
+
+active_staff_new <- read_excel(file.choose())
+
+active_staff_updated <- rbind(active_staff_new, active_staff)
+active_staff_updated <- active_staff_updated %>%
+  distinct()
+
+
+# Truncate the table
+dbExecute(conn1, "DROP TABLE EXT_ACTIVE_STAFF")
+
+## Write to Oracle 
+batch_size <- 1000
+ 
+index_squence <- seq(1, nrow(active_staff_updated), by = batch_size)
+for (i in index_squence) {
+  if(i == max(index_squence)) {
+    batch <- active_staff_updated[i:nrow(active_staff_updated), ]
+  } else {
+    batch <- active_staff_updated[i:(i + batch_size - 1), ]
+  }
+  dbWriteTable(conn = conn1, name = "EXT_ACTIVE_STAFF", value = batch, row.names = FALSE, append = TRUE)
+  print(paste0("i is:", i))
+  print(batch)
+}
+
+```
+
+
+```{r Process Hire Term Data, echo = FALSE, warning = FALSE, message = FALSE}
+
+# Med Staff Active Credentialed Staff Data
+hire_term_tbl <- tbl(conn1, "EXT_STAFF_HIRE_TERM")
+hire_term <- hire_term_tbl %>% collect()
+
+hire_term_new <- read_excel(file.choose())
+
+hire_term_updated <- rbind(hire_term_new, hire_term)
+hire_term_updated <- hire_term_updated %>%
+  distinct()
+
+
+# Truncate the table
+dbExecute(conn1, "DROP TABLE EXT_STAFF_HIRE_TERM")
+
+## Write to Oracle 
+batch_size <- 1000
+ 
+index_squence <- seq(1, nrow(hire_term_new), by = batch_size)
+for (i in index_squence) {
+  if(i == max(index_squence)) {
+    batch <- hire_term_new[i:nrow(hire_term_new), ]
+  } else {
+    batch <- hire_term_new[i:(i + batch_size - 1), ]
+  }
+  dbWriteTable(conn = conn1, name = "EXT_STAFF_HIRE_TERM", value = batch, row.names = FALSE, append = TRUE)
+  print(paste0("i is:", i))
+  print(batch)
+}
+
+```
+
+
